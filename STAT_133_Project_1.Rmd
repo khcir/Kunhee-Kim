@@ -1,0 +1,313 @@
+---
+title: 'Project 1: North Atlantic Tropical Cyclones'
+output: html_document
+---
+
+# VIDEO LINK: https://berkeley.zoom.us/rec/share/MzY3601sO5mp2NVzK7chHYx0FSIa6YDmL4RhuQP4gCf1uE_j2FjpU0HUHCbFecXe.JESCFkskc5_vQxkY?startTime=1646452464000 
+
+## TODO:
+1. exploratory analysis
+2. Report
+3. 3-minute video
+
+
+# A) DATA IBTrACS
+```{r}
+library(tidyverse)
+library(ggplot2)
+library(maps)     
+library(rnaturalearth)
+library(gganimate)
+library(lubridate)
+```
+
+```{r echo = FALSE, results = "hide"}
+#install.packages("gifski")
+#install.packages("png")
+#install.packages("Rcpp")
+#install.packages("gganimate", dependencies = T)
+#install.packages("spData", dependencies = T)
+```
+
+A.2) Importing Data in R
+```{r}
+col_names <-c("SID","SEASON","NUMBER","BASIN","SUBBASIN","NAME","ISO_TIME","NATURE","LAT","LON","WMO_WIND","WMO_PRES","WMO_AGENCY","TRACK_TYPE","DIST2LAND","LANDFALL")
+
+col_types <- c("character","integer","integer","character","character","character","character","character","real","real","integer","integer","character","character","integer","integer")
+
+dat <- read.csv(
+  file = "/Users/kundoongs/Desktop/ibtracs.NA.list.v04r00.csv",
+  colClasses = c(col_types, rep("NULL", 147)),
+  stringsAsFactors = FALSE,
+  skip = 77876,
+  na.strings =""
+)
+
+colnames(dat) <- col_names
+head(dat)
+```
+
+A.3) Adding a MONTH column
+```{r}
+dat$ISO_TIME = as.POSIXct(dat$ISO_TIME)
+dat$MONTH <- lubridate::month(dat$ISO_TIME)
+```
+
+
+```{r}
+str(dat, vec.len=1)
+```
+
+# B) Univariate Exploratory Data Analysis (UNREPORTED)
+```{r echo = FALSE, results = "hide"}
+# Explore each columns
+unique(select(dat,SEASON)) #52 seasons (years)
+
+#Identify unique categories and their frequencies
+count(dat,BASIN)
+count(dat,SUBBASIN)
+count(dat,NATURE)
+
+#sort in ascending order
+#sort(unique(pull(dat,ISO_TIME)))
+```
+
+
+```{r echo = FALSE, results = "hide"}
+summary(dat$LAT)
+ggplot(data = dat) + geom_boxplot(aes(x = LAT)) #most of the LAT values are distributed around 20~30
+
+summary(dat$LON)
+ggplot(data = dat) + geom_boxplot(aes(x = LON)) #most of the LON values are distributed around -70~-50
+
+```
+
+
+
+```{r echo = FALSE, results = "hide"}
+#WMO_WIND : Maximum sustained wind speed from the WMO agency for the current location.
+summary(dat$WMO_WIND)
+ggplot(data = dat) + geom_density(aes(x = WMO_WIND))
+
+#WMO_PRES
+summary(dat$WMO_PRES)
+ggplot(data = dat) + geom_density(aes(x = WMO_PRES))
+
+ggplot(data = dat, aes(x =WMO_WIND, y = WMO_PRES)) + geom_point() + labs(title = "WMO_PRES VS. WMO_WIND") + geom_smooth(method = "lm")
+```
+
+
+```{r echo = FALSE, results = "hide"}
+#DIS2LAND : Distance to land from the current position
+summary(dat$DIST2LAND)
+ggplot(data = dat) + geom_boxplot(aes(x = DIST2LAND))
+```
+
+
+```{r echo = FALSE, results = "hide"}
+#LANDFALL : Nearest location to land within next 6 hours
+#unique(select(dat,LANDFALL))
+ggplot(data = dat) + geom_histogram(aes(x = LANDFALL))
+
+```
+
+
+# C) Main Analysis
+
+### C1) Atlantic Hurrican Seasons
+#### Claim 1a) The 2020 Atlantic hurricane season featured a total of 31 tropical cyclones, all but one of which became a named storm. As expected, none of the tropical cyclones formed pre-season.
+```{r}
+# WMO_WIND in knots, so change to miles per hour
+dat$WMO_WIND <- dat$WMO_WIND * 1.15078
+#hurricane season June to Nov
+storm2020_hurr <- filter(dat,SEASON == 2020, MONTH >= 6, MONTH <=11)
+
+#count # of occurences for each named storm
+arrange(count(storm2020_hurr, NAME), desc(n))
+
+#pre-season hurricanes?
+count(filter(dat,SEASON == 2020, MONTH <6| MONTH >11),NAME)
+
+#Storm Paulette
+p_storm <- filter(storm2020_hurr, NAME == 'PAULETTE')
+head(p_storm)
+ggplot(p_storm,aes(WMO_WIND))+geom_histogram() + labs(title = "Wind Speed for Storm Paulette")
+mean(p_storm$WMO_WIND, na.rm= TRUE)
+count(p_storm,MONTH)
+mean(filter(storm2020_hurr, NAME == "ETA")$WMO_WIND, na.rm= TRUE)
+count(filter(storm2020_hurr, NAME == "ETA"),MONTH)
+```
+1a) Analysis: After filtering the data for the 2020 hurricane season, by counting unique values of name, it comes out to be a total of 29 named tropical cyclones. There were 2 tropical cyclones that formed during the pre-season with a total occurrence of 27. The most frequent storm was the Paulette, which had 174 occurrences and an average wind speed of 55.25 mph. Most of the wind speed of Paulette was between 30 and 50 mph and all of them occurred during September. The second most frequent storm was “ETA” which had a higher average wind speed of 83.55 which occurred in October and November. My interpretation of this result is that even though Paulette was the most frequent storm in 2020, it wasn’t categorized as a major hurricane. Also I could assume that September is the warmest month that makes the hurricane active. 
+
+
+#### Claim 1b) Of the named storms in the 2020 Atlantic hurricane season, seven of the hurricanes intensified into major hurricanes although none of them reached Category 5 status.
+```{r}
+# major hurricanes are in category 3,4,5
+# category 3: 111-129, category 4: 130 - 156, category 5: 157 or higher
+
+#storms with category 3,4,5
+count(filter(storm2020_hurr, WMO_WIND >= 111)) 
+
+#name of the hurricanes intensified into major hurricanes
+count(filter(storm2020_hurr, WMO_WIND >= 111), NAME) 
+
+#hurricanes in category 5
+count(filter(storm2020_hurr, WMO_WIND >= 157))
+
+#major hurricane by month
+ggplot(data = filter(storm2020_hurr, WMO_WIND >= 111), aes(x = MONTH)) + geom_bar()
+```
+```{r}
+ggplot(data = filter(storm2020_hurr, WMO_WIND >= 111), aes(x = LON, y = LAT, color = NAME)) + 
+  geom_point() + labs(title = "LAT VS LONG of 2020 Atlantic Major Hurricanes")
+
+count(filter(storm2020_hurr, WMO_WIND >= 111),SUBBASIN)
+```
+1b) Analysis: While there were 36 occurrences in category 3,4,5, seven of the hurricanes intensified into the major hurricanes. Also, none of them reached category 5. When I plotted the histogram of frequency of hurricanes by month, September and October was the most frequent month that major hurricanes occurred. I wanted to get a sense of where major hurricanes occur and move around in 2020, so I visualized the latitude and longitude of 7 major hurricanes. I could notice there are three areas where hurricanes are clustered around, recognizing that these hurricanes occurred in the Caribbean Sea, Gulf of Mexico, and North Atlantic. I could also interpret that September and October were the warmest months that caused major hurricanes to occur where they move around different basins. 
+
+
+#### Claim 1c) The 2010 Atlantic hurricane season had 19 named storms. Despite this above average activity, not one hurricane hit the United States.
+```{r}
+storm2010 <- filter(dat,SEASON == 2010, MONTH >= 6 , MONTH <=11)
+
+#Named storms in 2010
+arrange(count(storm2010,NAME), desc(n))
+
+#Storms that hit United States
+filter(storm2010, LAT == 37.090 & LON == -95.7130)
+ggplot(data = storm2010, aes(x = LON, y = LAT, color = NAME)) + 
+  geom_point(size = 0.5) + labs(title = "LAT VS LONG of 2010 Atlantic Hurricane")
+
+ggplot(data = filter(storm2010, WMO_WIND >= 111), aes(x = MONTH)) + geom_bar()
+```
+1c) Analysis: Aftering filtering the data for the 2010 Atlantic hurricane season, it turns out to be 20 named storms. This year, the storm “IGOR'' turned out to be the most active storm with occurrences of 119. There were zero hurricanes that hit the United States, where the majority of storms occurred in the Caribbean Sea, Gulf of Mexico, and North Atlantic. Also, September was the most frequent month that major hurricanes occurred.
+
+#### Claim 1d) The 2005 Atlantic hurricane season featured a total of 27 named storms, seven of which became major hurricanes, making this the season with the most number of major hurricanes during the period 1970-2020.
+```{r}
+storm2005 <- filter(dat,SEASON == 2005, MONTH >= 6, MONTH <=11)
+# 27 named storms in 2005
+count(storm2005,NAME)
+
+#major hurricane?
+count(filter(storm2005, WMO_WIND >= 111), NAME)
+
+#dataframe with major hurricanes
+storms_major<- filter(dat,WMO_WIND >= 111)
+
+#dataframe group by year by number of distinct names
+temp <-summarise(group_by(storms_major,SEASON), count = n_distinct(NAME))
+head(arrange(temp,desc(count)))
+
+ggplot(data = filter(storm2005, WMO_WIND >= 111), aes(x = LON, y = LAT, color = NAME)) + 
+  geom_point() + labs(title = "Major Hurricanes in 2005")
+
+```
+1D) Analysis: There were a total of 27 named storms featured in the 2005 Atlantic hurricane season, where 7 of them became major hurricanes. 2005 was the season with the most number of major hurricanes during the period 1970-2020 along with 2020. When I visualized the latitude and longitude of 2005 hurricanes, it turns out that most of the major hurricanes occurred in the Gulf of Mexico and Caribbean Sea.  I would interpret this result as where 2005 had the most number of major hurricanes, the next top year was 2020 which is 15 years later. I would assume that it would be difficult for forcastors to predict how major hurricanes form and will occur. 
+
+#### Claim 1e) In the period from 1970 to 2020, the 2020 Atlantic hurricane season was the most active on record. By “active” we mean the season with the most tropical cyclones.
+```{r}
+hur_season <- filter(dat, MONTH >= 6, MONTH <=11)
+#number of occurrences of storms from 1970 to 2020
+head(arrange(count(hur_season,SEASON),desc(n)))
+
+#2005 has the most active on record
+arrange(count(storm2005, NATURE),desc(n))
+
+#average wind speed and pressure for storm 2005
+summarise(group_by(storm2005,NATURE), mean_speed = mean(WMO_WIND,na.rm = TRUE), mean_pres =mean(WMO_PRES,na.rm = TRUE))
+
+ggplot(data = storm2005, aes(x = LON, y = LAT, color = NATURE)) + 
+  geom_point(alpha = 0.5) + labs(title = "Tropical cyclones in 2005")
+```
+1e) In the period from 1970 to 2020, it seems like 2005 was the season with the most number of Tropical cyclones and the most active season. It had a total of 1665 occurrences where 2020 had 1652 occurrences. There were four different types of storm in 2005 which were Tropical, Extratropical, Disturbance and Subtropical. TS(Nature = tropical) had an average wind speed of 56.43mph, which was the highest among the four different types of storm, and average pressure of 987.75mb, which was the lowest among the four different types. After visualizing the latitude and longitude by Nature, it stands out that TS occurs at different types of basins while ET usually occurs at the North Atlantic. To interpret this result, even though 2005 was the season with the most number of tropical cyclones, average wind speed of storms wasn't that high compared to 2020 which was the second season with the most number of storms. I would assume that as global warming developed over time, it increased the likelihood of stronger hurricanes.
+
+#### Claim 1f) In the 2020 Atlantic hurricane season, 14 storms intensified into hurricanes,making this season the one with the most number of hurricanes during the period 1970 to 2020.
+```{r}
+#hurricanes are storms with wind speed greater than or equal to 74
+
+# number of hurricanes from 1970 to 2020
+storms_hurr <-filter(dat,WMO_WIND >= 74, SEASON >= 1970, SEASON <= 2020,MONTH >= 6, MONTH <=11 )
+arrange(summarise(group_by(storms_hurr,SEASON), count = n_distinct(NAME)),desc(count))
+
+#compare season 2005 and 2020
+storms_10_20 <- filter(storms_hurr, SEASON == 2005 | SEASON == 2020)
+ggplot(data = storms_10_20, aes(x = LON, y = LAT, color = SEASON, size = WMO_WIND)) + 
+  geom_point(alpha = 0.5) + labs(title = "Storms in 2005 & 2020")
+
+#average wind speed of 2005 & 2020
+mean(filter(storms_hurr, SEASON == 2005)$WMO_WIND, na.rm= TRUE)
+mean(filter(storms_hurr, SEASON == 2020)$WMO_WIND, na.rm= TRUE)
+
+count(filter(storms_hurr, SEASON == 2005),SUBBASIN)
+count(filter(storms_hurr, SEASON == 2020),SUBBASIN)
+
+ggplot(data = storms_10_20, aes(x = WMO_WIND )) + geom_boxplot() + facet_wrap(~ SEASON)
+```
+1f) By filtering out the entire storm data with only the information from the 1970 to 2020 hurricane season, it shows that 2005 and 2020 was the season with the most number of hurricanes where 20 storms intensified into hurricanes. By visualizing the latitude and longitude by each Season, it seems like most of the storms in both 2005 and 2020 occurred in the North Atlantic. The average speed for 2005 was 115.48 where average speed for 2020 was 106.39 mph. To interpret this result, I don’t see any clear difference between these two seasons, since the occurrence of hurricanes were located similarly and the average wind speed was also similar. 
+
+
+### C2) Animated Map
+```{r}
+storms2020 <- filter(dat, SEASON == 2020)
+```
+
+1. Plotting location of storm records
+```{r}
+ggplot(data = storms2020, aes(x = LON, y = LAT, color = NAME)) + 
+  geom_point(size = 0.5)
+```
+Each dot represents the location of a single storm record, with longitude in the x-axis, and latitude in y-axis. I also mapped the column "NAME" to the "color" attribute.
+
+
+2. Basic maps
+```{r}
+world_map <- map_data("world")
+head(world_map)
+```
+```{r}
+gg_world <- ggplot() + 
+  geom_polygon(data = world_map, 
+               aes(x = long, y = lat, group = group), 
+               fill = "gray95", colour = "gray70", size = 0.2) +
+  theme_bw()
+
+gg_world
+```
+Using the package "maps", I was able to plot the basic world map using the latitude and longitutde variable in dataframe world_map. 
+
+3. Static Plot before Animated Map
+```{r}
+static_plot <- gg_world + geom_point(data = storms2020, aes(x = LON, y = LAT, color = NAME, size = WMO_WIND), alpha = 0.5)+ xlim(c(-150, 10)) + 
+  ylim(c(0, 60))
+
+plot(static_plot)
+```
+I've added the location of storms to the world map. Since most of the storms occured in the North Atlantic basin, I zoomed in the map by using the xlim and ylim function. I've also take the WMO_WIND in account and mapped to the "size" argument. 
+```{r}
+#temp
+gg_world + geom_point(data = storms_10_20, aes(x = LON, y = LAT, color = SEASON), alpha = 0.5)+ xlim(c(-150, 10)) + 
+  ylim(c(0, 60))
+
+```
+
+## ISO_TIME based Animated Map
+```{r}
+static_plot + labs(title = 'Time: {frame_time}') + transition_time(storms2020$ISO_TIME) 
+```
+
+It seems like the first tropical cyclone named Arthur occured in May 16 in the North Atlantic with wind speed of 30mph. It is easily visualized that the storms move around along the path transforming to different tropical cyclones. I was able to notice that the hurricane, Iota, occurred on November 16 with the fastest wind speed of 135 mph. I was able to notice that pressure and the wind speed has an inverse relationship, so it stands out that Iota has the highest wind speed and the lowest pressure among the storms that occurred in 2020. With Iota, two other storms named Eta and Theta occurred in November, which were mostly located in the North Atlantic and Caribbean Sea . Also by the animated map, it was easily visualized that during September there were 10 different types of storms that occurred mostly in the North Atlantic basin. In summary, most of the storms in 2020 occurred in the North Atlantic basin with 29 named hurricanes. 
+
+## Code to analyze Animated Map
+```{r}
+head(arrange(storms2020, ISO_TIME), n=1)
+max(storms2020$WMO_WIND, na.rm =TRUE)
+filter(storms2020 , WMO_WIND == 135)
+count(filter(storms2020, MONTH == 11), SUBBASIN)
+count(filter(storms2020, MONTH == 9), SUBBASIN)
+ggplot(storms2020, aes(x = WMO_WIND, y = WMO_PRES, color = NAME)) + geom_point()
+```
+
+#### Conclusion
+In conclusion, as comparing 2005 and 2020, even though the frequency of hurricanes were similar, the number of major hurricanes and its average speed became higher. I would assume that global warming has been a significant factor which provided warmer water which provided more energy fuel for these storms. I realized that it might be difficult to predict when hurricanes will occur due to the lack of data that prevents us from analyzing patterns. 
+
+
